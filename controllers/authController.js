@@ -1,6 +1,7 @@
+const transport = require("../middleware/sendMail");
 const { signupSchema, signinSchema } = require("../middleware/validator");
 const User = require("../models/user.model");
-const { doHash, doHashValidation } = require("../utils/hashing");
+const { doHash, doHashValidation, hmacProcess } = require("../utils/hashing");
 const jwt = require("jsonwebtoken");
 
 exports.signup = async (req, res) => {
@@ -77,7 +78,8 @@ exports.signin = async (req, res) => {
         email: existingUser.email,
         verified: existingUser.verified,
       },
-      process.env.JWT_SECRET
+      process.env.JWT_SECRET,
+      { expiresIn: "8h" }
     );
 
     res
@@ -90,6 +92,56 @@ exports.signin = async (req, res) => {
         token,
         message: "Logged in successfully",
       });
+  } catch (error) {
+    console.log(error);
+  }
+};
+exports.signout = async (req, res) => {
+  res.clearCookie("Authorization").status(200).json({
+    success: true,
+    message: "Logged out successfully",
+  });
+};
+exports.sendVerificationCode = async (req, res) => {
+  const { email } = req.body;
+  try {
+    const existingUser = await User.findOne({ email });
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+    if (existingUser.verified) {
+      return res.status(400).json({
+        success: false,
+        message: "You are already verified",
+      });
+    }
+    const codeValue = Math.floor(Math.random() * 1000000).toString();
+    let info = await transport.sendMail({
+      from: process.env.NODE_EMAIL,
+      to: existingUser.email,
+      subject: "Verify your email",
+      html: "<h1>" + codeValue + "</h1>",
+    });
+    if (info.accepted[0] === existingUser.email) {
+      const hashedCodeValue = hmacProcess(
+        codeValue,
+        process.env.HMAC_VERIFICATION_CODE_SECRET
+      );
+      existingUser.verificationCode = hashedCodeValue;
+      existingUser.verificationCodeValidation = Date.now();
+      await existingUser.save();
+      return res.status(200).json({
+        success: true,
+        message: "Verification code sent successfully",
+      });
+    }
+    res.status(400).json({
+      success: false,
+      message: "Verification code sent failed",
+    });
   } catch (error) {
     console.log(error);
   }
