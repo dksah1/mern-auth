@@ -20,14 +20,16 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    verifiCationCode: {
-      type: Number,
+    verificationCode: {
+      type: String,
       select: false,
     },
-    verifiCationCodeValidation: {
-      type: Number,
+
+    verificationCodeValidation: {
+      type: Date,
       select: false,
     },
+
     forgotPasswordCode: {
       type: Number,
       select: false,
